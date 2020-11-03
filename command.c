@@ -11,7 +11,9 @@
 #include "command.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h> // Get rid of this 
+#include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 /** 
  * This function creates a new Command struct by parsing the command name and
@@ -24,9 +26,10 @@ struct Command* createCommand(char* rawData)
   char *token;
   char *saveptr;
 	struct Command* newCommand = malloc(sizeof(struct Command));
-  // Default exitStatus and runScope for built-in commands
+  // Default exitStatus, runScope, and termSig for built-in commands
   newCommand->exitStatus = 0;
   newCommand->runScope = 0;
+  newCommand->termSig = 0;
   // Default  file names for redirection to NULL
   newCommand->inputFile = NULL;
   newCommand->outputFile = NULL;
@@ -39,6 +42,7 @@ struct Command* createCommand(char* rawData)
    */
 
   if (strcmp(rawData + strlen(rawData) - 2, " &") == 0) {
+    newCommand->runScope = 1;
     rawData[strlen(rawData) - 2] = '\0';
   }
 
@@ -84,9 +88,34 @@ struct Command* createCommand(char* rawData)
   }  while (token != NULL);
 
   // execvp() requires the last element in the arg array to be NULL
-  //newCommand->args[newCommand->numArgs] = NULL;
+  newCommand->args[newCommand->numArgs] = NULL;
 
 	return newCommand;
+}
+
+pid_t executeCommand(struct Command* command)
+{
+  pid_t spawnPid = fork();
+  switch (spawnPid) {
+    case -1:
+      perror("fork()\n");
+      fflush(stdout);
+      exit(1);
+      break;
+    case 0:
+      // This is what the child is doing
+      execvp(command->name, command->args);
+      fflush(stdout);
+      perror(command->name);
+      fflush(stdout);
+      exit(2);
+      break;
+    default:
+      // This is what the parent is doing
+      spawnPid = waitpid(spawnPid, &command->exitStatus, 0);
+      break;
+  }
+  return spawnPid;
 }
 
 /**
@@ -105,7 +134,7 @@ void destroyCommand(struct Command* command)
     free(command->outputFile);
   }
   if (command->numArgs > 0) {
-    for (int i = command->numArgs - 1; i >= 0; i--) {
+    for (int i = command->numArgs; i >= 0; i--) {
       free(command->args[i]);
     }
   }

@@ -17,6 +17,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 
 #define MAX_INPUT 2048
 
@@ -24,33 +25,50 @@ int variableExpand(char* target, int targetMax, char* source, char token, char* 
 
 int main(int argc, char const *argv[])
 {
-  char* shellPid = malloc(sizeof(pid_t));
+  pid_t shellPid = getpid();
+  char* shellPidStr = calloc(10, sizeof(char));
   char userInput[MAX_INPUT];
   char expandedInput[MAX_INPUT];
   struct Command* myCommand = NULL;
+
   // Convert smallsh pid to string for use in variable expansion
-  sprintf(shellPid, "%d", getpid());
-  // Display a command prompt until the "exit" command is detected
-  printf("Shell is running under pid %s", shellPid);
-  do {
-    printf(": ");
-    //fflush(stdout);
-    fgets(userInput, MAX_INPUT, stdin);
-    // Remove the newline character
-    userInput[strlen(userInput) - 1] = '\0';
+  sprintf(shellPidStr, "%d", shellPid);
+
+  while(1) {
+    printf(": ");   // Display the command prompt
+    fflush(stdout);
+    fgets(userInput, MAX_INPUT, stdin);       // Get user input
+    userInput[strlen(userInput) - 1] = '\0';  // Remove the newline character
     // Ignore blank commands and comments
     if (userInput[0] != '\0' && userInput[0] != '#') {
-      if (variableExpand(expandedInput, MAX_INPUT, userInput, '$', shellPid)) {
-        printf("%s", expandedInput);
+      if (variableExpand(expandedInput, MAX_INPUT, userInput, '$', shellPidStr)) {
         myCommand = createCommand(expandedInput);
       }
+      // Handle commands
+      if (strcmp(myCommand->name, "exit") == 0) {
+      // Handle built-in "exit" command
+        destroyCommand(myCommand);
+        break;
+      } else if (strcmp(myCommand->name, "cd") == 0) {
+      // Handle built-in "cd" command
+        if (myCommand->numArgs == 1) {
+        // "cd" is entered with no arguments
+          chdir(getenv("HOME"));
+        } else {
+          chdir(myCommand->args[1]);
+        }
+        destroyCommand(myCommand); 
+      } else if (strcmp(myCommand->name, "status") == 0) {
+        printf("Display status\n");
+      } else {
+        executeCommand(myCommand);
+        destroyCommand(myCommand);
+      }
     }
+  }
+  printf("Exiting smallsh.\n");
 
-  } while (myCommand == NULL || strcmp(myCommand->name, "exit") != 0);
-
-  
-  destroyCommand(myCommand);
-  free (shellPid);
+  free (shellPidStr);
   return 0;
 }
 

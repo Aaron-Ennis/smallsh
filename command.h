@@ -8,6 +8,8 @@
  * operate on the structure.
  */
 
+#include <sys/types.h>
+#include <unistd.h>
 #ifndef COMMAND_H
 #define COMMAND_H
 
@@ -20,10 +22,12 @@ struct Command
   char* outputFile;
   int numArgs;
   int exitStatus;
+  int termSig;
   int runScope; // 0 = foreground, 1 = background
 };
 
 struct Command* createCommand(char* rawData);
 void destroyCommand(struct Command* command);
+pid_t executeCommand(struct Command* command);
 
 #endif

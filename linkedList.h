@@ -1,7 +1,7 @@
 /* 
  * Name: Aaron Ennis
  * Email: ennisa@oregonstate.edu
- * Last modified: 08 October 2020
+ * Last modified: 31 October 2020
  * Description: This is the declaration/interface file for a linked list that
  * uses front and back sentinels. This file provides implementation as a deque
  * abstract data type.
