@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 /** 
  * This function creates a new Command struct by parsing the command name and
@@ -70,12 +71,12 @@ struct Command* createCommand(char* rawData)
       break;
     }
     if (strcmp(token, "<") == 0) {
-      // Store the input file name for redirection
+      // Store the file name for input redirection
       token = strtok_r(NULL, " ", &saveptr);
       newCommand->inputFile = calloc(strlen(token) + 1, sizeof(char));
       strcpy(newCommand->inputFile, token);
     } else if (strcmp(token, ">") == 0) {
-      // Store the output file for redirection
+      // Store the file name for output redirection
       token = strtok_r(NULL, " ", &saveptr);
       newCommand->outputFile = calloc(strlen(token) + 1, sizeof(char));
       strcpy(newCommand->outputFile, token);
@@ -93,17 +94,61 @@ struct Command* createCommand(char* rawData)
 	return newCommand;
 }
 
-pid_t executeCommand(struct Command* command)
+/**
+ *  (TODO) Fill out function description
+ */
+int executeCommand(struct Command* command)
 {
-  pid_t spawnPid = fork();
+  pid_t spawnPid;
+  int inputFD, outputFD, dupResult;
+
+  // Open file for input if applicable
+  if (command->inputFile != NULL) {
+    inputFD = open(command->inputFile, O_RDONLY);
+    if (inputFD == -1) {
+      perror("Input file");
+      fflush(stdout);
+      return 1;
+    }
+  }
+
+  // Open file for output if applicable
+  if (command->outputFile != NULL) {
+    outputFD = open(command->outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (outputFD == -1) {
+      perror("Output file");
+      fflush(stdout);
+      return 1;
+    }
+  }
+
+  spawnPid = fork();
   switch (spawnPid) {
     case -1:
       perror("fork()\n");
       fflush(stdout);
-      exit(1);
+      return 1;
       break;
     case 0:
       // This is what the child is doing
+      // Redirect input if applicable
+      if (command->inputFile != NULL) {
+        dupResult = dup2(inputFD, 0);
+        if (dupResult == -1) {
+          perror("Input redirect");
+          fflush(stdout);
+          return 1;
+        }
+      }
+      // Redirect output if applicable
+      if (command->outputFile != NULL) {
+        dupResult = dup2(outputFD, 1);
+        if (dupResult == -1) {
+          perror("Output redirect");
+          fflush(stdout);
+          return 1;
+        }
+      }
       execvp(command->name, command->args);
       fflush(stdout);
       perror(command->name);
@@ -115,7 +160,8 @@ pid_t executeCommand(struct Command* command)
       spawnPid = waitpid(spawnPid, &command->exitStatus, 0);
       break;
   }
-  return spawnPid;
+
+  return 0;
 }
 
 /**

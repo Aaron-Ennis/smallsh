@@ -28,6 +28,6 @@ struct Command
 
 struct Command* createCommand(char* rawData);
 void destroyCommand(struct Command* command);
-pid_t executeCommand(struct Command* command);
+int executeCommand(struct Command* command);
 
 #endif
