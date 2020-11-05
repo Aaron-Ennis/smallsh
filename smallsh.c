@@ -10,26 +10,37 @@
  * redirection. 
  */
 
-#include "command.h"
 #include "linkedList.h"
+#include "command.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #define MAX_INPUT 2048
 
 int variableExpand(char* target, int targetMax, char* source, char token, char* replStr);
+void cleanUpBeforeExit(struct LinkedList* commands);
 
 int main(int argc, char const *argv[])
 {
   pid_t shellPid = getpid();
+  pid_t bgPid;
   char* shellPidStr = calloc(10, sizeof(char));
   char userInput[MAX_INPUT];
   char expandedInput[MAX_INPUT];
   struct Command* myCommand = NULL;
+  struct Command* bgCommand = NULL;
+
+  // Use a linked list to keep track of processes running in the background,
+  // and initialize an iterator for it.
+  struct LinkedList* bgCommands = linkedListCreate();
+
+  int fgOnly = 0;   // Keep track of foreground only mode
+  int lastFgStatus = 0; // Keep track of the status of the last fg command
 
   // Convert smallsh pid to string for use in variable expansion
   sprintf(shellPidStr, "%d", shellPid);
@@ -39,7 +50,9 @@ int main(int argc, char const *argv[])
     fflush(stdout);
     fgets(userInput, MAX_INPUT, stdin);       // Get user input
     userInput[strlen(userInput) - 1] = '\0';  // Remove the newline character
-    // Ignore blank commands and comments
+    
+    // Keep processing the commands as long as a comment or a blank line is
+    // entered. Otherwise, just loop back and display the prompt.
     if (userInput[0] != '\0' && userInput[0] != '#') {
       if (variableExpand(expandedInput, MAX_INPUT, userInput, '$', shellPidStr)) {
         myCommand = createCommand(expandedInput);
@@ -59,14 +72,50 @@ int main(int argc, char const *argv[])
         }
         destroyCommand(myCommand); 
       } else if (strcmp(myCommand->name, "status") == 0) {
-        printf("Display status\n");
+      // Handle built-in "status" command
+        if (lastFgStatus > 1) {
+          printf("terminated by signal %d\n", lastFgStatus);
+        } else {
+          printf("exit value %d\n", lastFgStatus);
+        }
       } else {
-        executeCommand(myCommand);
+        if (myCommand->runScope == 1 && fgOnly == 0) {
+        // Keep track of the command since it's going to run in the background
+          linkedListAddFront(bgCommands, myCommand);
+          executeCommand(myCommand, fgOnly);
+        } else {
+        // Otherwise, run it and destroy it immediately
+        lastFgStatus = executeCommand(myCommand, fgOnly);
         destroyCommand(myCommand);
+        }
       }
     }
+    // Iterate through the list of background commands.
+    struct Iterator* iterator = createIterator(bgCommands);
+    while(iteratorHasNext(iterator)) {
+      bgCommand = iteratorNext(iterator);
+      bgPid = waitpid(bgCommand->myPid, &bgCommand->exitStatus, WNOHANG);
+      // If the return value for waitpid() is 0, the pid has not terminated.
+      // Otherwise, the pid itself will return if it has terminated...
+      if (bgPid != 0) {
+        if (WIFEXITED(bgCommand->exitStatus)) {
+            printf("background pid %d is done: exit value %d\n", bgCommand->myPid, bgCommand->exitStatus);
+            // Free this command and remove it from the list
+            destroyCommand(bgCommand);
+            iteratorRemove(iterator);    
+          } else {
+            printf("background pid %d is done: terminated by signal %d\n", bgCommand->myPid, bgCommand->exitStatus);
+            // Free this command and remove it from the list
+            destroyCommand(bgCommand);
+            iteratorRemove(iterator);
+          }
+      }
+    }
+    iteratorDestroy(iterator);  // Remove the iterator for next loop
   }
   printf("Exiting smallsh.\n");
+
+  cleanUpBeforeExit(bgCommands);
 
   free (shellPidStr);
   return 0;
@@ -127,4 +176,28 @@ int variableExpand(char* target, int targetMax, char* source, char token, char* 
   // Need to null-term target since we are doing char-by-char copy
   *target = '\0';
   return 1;
+}
+
+
+
+
+/**
+ *  This function takes a LinkedList struct as a parameter and performs
+ *  all of the necessary memory cleanup. It should be called just before the
+ *  program exits.
+ */
+void cleanUpBeforeExit(struct LinkedList* commands) 
+{
+  struct Iterator* iterator = createIterator(commands);
+  struct Command* currentCommand = NULL;
+
+  // Destroy/free all of the command structs before we destroy the LinkedList
+  while (iteratorHasNext(iterator)) {
+    currentCommand = iteratorNext(iterator);
+    destroyCommand(currentCommand);
+  }
+
+  // Destroy/free the iterator we created for this function
+  iteratorDestroy(iterator);
+  linkedListDestroy(commands);
 }

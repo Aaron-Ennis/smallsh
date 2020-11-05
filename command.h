@@ -10,6 +10,8 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+
+
 #ifndef COMMAND_H
 #define COMMAND_H
 
@@ -17,17 +19,17 @@
 struct Command
 {
   char* name;
-  char* args[512];  // We're only supporting up to 512 arguments
+  char* args[512];
   char* inputFile;
   char* outputFile;
   int numArgs;
   int exitStatus;
-  int termSig;
+  pid_t myPid;
   int runScope; // 0 = foreground, 1 = background
 };
 
 struct Command* createCommand(char* rawData);
 void destroyCommand(struct Command* command);
-int executeCommand(struct Command* command);
+int executeCommand(struct Command* command, int fgOnly);
 
 #endif

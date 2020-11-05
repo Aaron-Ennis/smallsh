@@ -8,10 +8,11 @@
 * NOTE: This is a slightly modified version of a linked list solution I built
  * for an assignment in CS261 - Data Structures.
  */
-#include "command.h"
+
 #ifndef LINKED_LIST_H
 #define LINKED_LIST_H
 
+#include "command.h"
 /* When implementing, this macro can be modified to use whatever 
  * type is required for the implementation.
  */
