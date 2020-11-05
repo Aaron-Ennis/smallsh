@@ -34,6 +34,8 @@ int main(int argc, char const *argv[])
   char expandedInput[MAX_INPUT];
   struct Command* myCommand = NULL;
   struct Command* bgCommand = NULL;
+  // We'll need this to ignore signals under certain circumstances
+  struct sigaction ignore = {0};
 
   // Use a linked list to keep track of processes running in the background,
   // and initialize an iterator for it.
@@ -44,6 +46,9 @@ int main(int argc, char const *argv[])
 
   // Convert smallsh pid to string for use in variable expansion
   sprintf(shellPidStr, "%d", shellPid);
+
+  ignore.sa_handler = SIG_IGN;
+  sigaction(SIGINT, &ignore, NULL);
 
   while(1) {
     printf(": ");   // Display the command prompt
@@ -82,10 +87,10 @@ int main(int argc, char const *argv[])
         if (myCommand->runScope == 1 && fgOnly == 0) {
         // Keep track of the command since it's going to run in the background
           linkedListAddFront(bgCommands, myCommand);
-          executeCommand(myCommand, fgOnly);
+          executeCommand(myCommand, fgOnly, ignore);
         } else {
-        // Otherwise, run it and destroy it immediately
-        lastFgStatus = executeCommand(myCommand, fgOnly);
+        // Otherwise, run it and destroy it immediately as a foreground process
+        lastFgStatus = executeCommand(myCommand, fgOnly, ignore);
         destroyCommand(myCommand);
         }
       }

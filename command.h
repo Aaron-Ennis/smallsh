@@ -14,6 +14,7 @@
 
 #ifndef COMMAND_H
 #define COMMAND_H
+#include <signal.h>
 
 // Define the command struct
 struct Command
@@ -30,6 +31,6 @@ struct Command
 
 struct Command* createCommand(char* rawData);
 void destroyCommand(struct Command* command);
-int executeCommand(struct Command* command, int fgOnly);
+int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore);
 
 #endif

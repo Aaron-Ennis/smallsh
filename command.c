@@ -109,6 +109,17 @@ struct Command* createCommand(char* rawData)
 }
 
 /**
+ *  This function takes a Command struct as a parameter and frees up the memory
+ *  allocated to hold the members of the struct.
+ */
+void handle_SIGINT(int sigNum) {
+  char* message = "terminated by signal ";
+  write(STDOUT_FILENO, message, 21);
+  fflush(stdout);
+  exit(sigNum);
+}
+
+/**
  *  This function takes a Command struct and an int as parameters. The int
  *  indicates if the shell is in foreground-only mode so we can set the
  *  run scope of the command appropriately.
@@ -116,10 +127,11 @@ struct Command* createCommand(char* rawData)
  *  and then redirects stdin and stdout as appropriate.
  *  It then spawns a child process to run the command using an exec() function.
  */
-int executeCommand(struct Command* command, int fgOnly)
+int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore)
 {
   pid_t spawnPid;
   int inputFD, outputFD, dupResult;
+  struct sigaction SIGINT_action = {0};
 
   // User has forced fg-only mode, so set the runScope to match.
   if (fgOnly == 1) {
@@ -174,6 +186,14 @@ int executeCommand(struct Command* command, int fgOnly)
           fflush(stdout);
           exit(1);
         }
+      }
+
+      // If we are running a command in the foreground, register a custom
+      if (command->runScope == 0) {
+        SIGINT_action.sa_handler = handle_SIGINT;
+        sigfillset(&SIGINT_action.sa_mask);
+        SIGINT_action.sa_flags = 0;
+        sigaction(SIGINT, &SIGINT_action, &ignore);
       }
       execvp(command->name, command->args);
       fflush(stdout);
