@@ -36,9 +36,9 @@ int main(int argc, char const *argv[])
   struct Command* myCommand = NULL;
   struct Command* bgCommand = NULL;
   // We'll need this to ignore signals under certain circumstances
-  struct sigaction ignore = {0};
+  struct sigaction ignore = {{0}};
   // We'll use this to 
-  struct sigaction toggleFGOnly = {0};
+  struct sigaction toggleFGOnly = {{0}};
 
   // Use a linked list to keep track of processes running in the background,
   // and initialize an iterator for it.

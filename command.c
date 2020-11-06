@@ -129,8 +129,8 @@ int executeCommand(struct Command* command, int fgOnly)
 {
   pid_t spawnPid;
   int inputFD, outputFD, dupResult;
-  struct sigaction SIGINT_action = {0};
-  struct sigaction SIGTSTP_action = {0};
+  struct sigaction SIGINT_action = {{0}};
+  struct sigaction SIGTSTP_action = {{0}};
 
   // User has forced fg-only mode, so set the runScope to match.
   if (fgOnly == 1) {
