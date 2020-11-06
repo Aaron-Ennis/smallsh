@@ -31,6 +31,6 @@ struct Command
 
 struct Command* createCommand(char* rawData);
 void destroyCommand(struct Command* command);
-int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore);
+int executeCommand(struct Command* command, int fgOnly);
 
 #endif

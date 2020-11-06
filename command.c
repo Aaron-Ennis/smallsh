@@ -2,7 +2,7 @@
  * Filename: command.c
  * Author: Aaron Ennis
  * Email: ennisa@oregonstate.edu
- * Last modified: 31 October 2020
+ * Last modified: 5 November 2020
  * Description: This is the implementation file that defines a structure
  * to contain information about a command, and some simple functions to 
  * operate on the structure.
@@ -109,14 +109,12 @@ struct Command* createCommand(char* rawData)
 }
 
 /**
- *  This function takes a Command struct as a parameter and frees up the memory
- *  allocated to hold the members of the struct.
+ *  This is the custom signal handler for SIGINT.
  */
 void handle_SIGINT(int sigNum) {
   char* message = "terminated by signal ";
   write(STDOUT_FILENO, message, 21);
   fflush(stdout);
-  exit(sigNum);
 }
 
 /**
@@ -127,11 +125,12 @@ void handle_SIGINT(int sigNum) {
  *  and then redirects stdin and stdout as appropriate.
  *  It then spawns a child process to run the command using an exec() function.
  */
-int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore)
+int executeCommand(struct Command* command, int fgOnly)
 {
   pid_t spawnPid;
   int inputFD, outputFD, dupResult;
   struct sigaction SIGINT_action = {0};
+  struct sigaction SIGTSTP_action = {0};
 
   // User has forced fg-only mode, so set the runScope to match.
   if (fgOnly == 1) {
@@ -188,17 +187,25 @@ int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore)
         }
       }
 
-      // If we are running a command in the foreground, register a custom
+      // Any forground or background commands should ignore SIGTSTP
+      SIGTSTP_action.sa_handler = SIG_IGN;
+      sigfillset(&SIGTSTP_action.sa_mask);
+      SIGTSTP_action.sa_flags = 0;
+      sigaction(SIGTSTP, &SIGTSTP_action, NULL);
+
+      // If we are running a command in the foreground, change SIGINT to
+      // run a custom handler
       if (command->runScope == 0) {
         SIGINT_action.sa_handler = handle_SIGINT;
         sigfillset(&SIGINT_action.sa_mask);
-        SIGINT_action.sa_flags = 0;
-        sigaction(SIGINT, &SIGINT_action, &ignore);
+        SIGINT_action.sa_flags = SA_RESTART;
+        sigaction(SIGINT, &SIGINT_action, NULL);
       }
       execvp(command->name, command->args);
-      fflush(stdout);
+      fflush(NULL);
       perror(command->name);
       fflush(stdout);
+      exit(1);
       break;
     default:
       if (command->runScope == 1) {
@@ -209,6 +216,7 @@ int executeCommand(struct Command* command, int fgOnly, struct sigaction ignore)
       } else {
       // Otherwise wait for process to terminate before returning control
         spawnPid = waitpid(spawnPid, &command->exitStatus, 0);
+        fflush(NULL);
         if (WIFEXITED(command->exitStatus)) {
           return WEXITSTATUS(command->exitStatus);
         } else {

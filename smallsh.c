@@ -2,7 +2,7 @@
  * Filename: smallsh.c
  * Author: Aaron Ennis
  * Email: ennisa@oregonstate.edu
- * Last modified: 28 October 2020
+ * Last modified: 5 November 2020
  * Description: This is the main implementation file for a Linux shell program
  * that implements a small subset of features akin to a more full-featured
  * shell like bash or csh. The purpose of this exercise is to demonstrate some
@@ -24,6 +24,7 @@
 
 int variableExpand(char* target, int targetMax, char* source, char token, char* replStr);
 void cleanUpBeforeExit(struct LinkedList* commands);
+void handle_SIGTSTP(int sigNum);
 
 int main(int argc, char const *argv[])
 {
@@ -36,6 +37,8 @@ int main(int argc, char const *argv[])
   struct Command* bgCommand = NULL;
   // We'll need this to ignore signals under certain circumstances
   struct sigaction ignore = {0};
+  // We'll use this to 
+  struct sigaction toggleFGOnly = {0};
 
   // Use a linked list to keep track of processes running in the background,
   // and initialize an iterator for it.
@@ -47,15 +50,28 @@ int main(int argc, char const *argv[])
   // Convert smallsh pid to string for use in variable expansion
   sprintf(shellPidStr, "%d", shellPid);
 
+  // Register a signal handler to ignore SIGINT/ctrl-c by default
+  // We will set custom behavior for this signal for foreground commands
   ignore.sa_handler = SIG_IGN;
+  sigfillset(&ignore.sa_mask);
+  ignore.sa_flags = 0;
   sigaction(SIGINT, &ignore, NULL);
 
+  // Register a custom signal handler for SIGTSTP to enter/exit foreground
+  // only command mode.
+  toggleFGOnly.sa_handler = handle_SIGTSTP;
+  sigfillset(&toggleFGOnly.sa_mask);
+  toggleFGOnly.sa_flags = SA_RESTART;
+  sigaction(SIGTSTP, &toggleFGOnly, NULL);
+  
+
   while(1) {
+    
     printf(": ");   // Display the command prompt
     fflush(stdout);
     fgets(userInput, MAX_INPUT, stdin);       // Get user input
     userInput[strlen(userInput) - 1] = '\0';  // Remove the newline character
-    
+      
     // Keep processing the commands as long as a comment or a blank line is
     // entered. Otherwise, just loop back and display the prompt.
     if (userInput[0] != '\0' && userInput[0] != '#') {
@@ -80,17 +96,19 @@ int main(int argc, char const *argv[])
       // Handle built-in "status" command
         if (lastFgStatus > 1) {
           printf("terminated by signal %d\n", lastFgStatus);
+          fflush(stdout);
         } else {
           printf("exit value %d\n", lastFgStatus);
+          fflush(stdout);
         }
       } else {
         if (myCommand->runScope == 1 && fgOnly == 0) {
         // Keep track of the command since it's going to run in the background
           linkedListAddFront(bgCommands, myCommand);
-          executeCommand(myCommand, fgOnly, ignore);
+          executeCommand(myCommand, fgOnly);
         } else {
         // Otherwise, run it and destroy it immediately as a foreground process
-        lastFgStatus = executeCommand(myCommand, fgOnly, ignore);
+        lastFgStatus = executeCommand(myCommand, fgOnly);
         destroyCommand(myCommand);
         }
       }
@@ -105,11 +123,13 @@ int main(int argc, char const *argv[])
       if (bgPid != 0) {
         if (WIFEXITED(bgCommand->exitStatus)) {
             printf("background pid %d is done: exit value %d\n", bgCommand->myPid, bgCommand->exitStatus);
+            fflush(stdout);
             // Free this command and remove it from the list
             destroyCommand(bgCommand);
             iteratorRemove(iterator);    
           } else {
             printf("background pid %d is done: terminated by signal %d\n", bgCommand->myPid, bgCommand->exitStatus);
+            fflush(stdout);
             // Free this command and remove it from the list
             destroyCommand(bgCommand);
             iteratorRemove(iterator);
@@ -117,13 +137,19 @@ int main(int argc, char const *argv[])
       }
     }
     iteratorDestroy(iterator);  // Remove the iterator for next loop
+    fflush(stdin);
   }
-  printf("Exiting smallsh.\n");
 
   cleanUpBeforeExit(bgCommands);
 
   free (shellPidStr);
   return 0;
+}
+
+void handle_SIGTSTP(int sigNum) {
+  char* message = "\nEntering foreground-only mode (& is now ignored)\n";
+  write(STDOUT_FILENO, message, 50);
+  fflush(stdout);
 }
 
 /**
