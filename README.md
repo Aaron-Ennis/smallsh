@@ -3,7 +3,7 @@
 
 This is my portfolio assignment for **CS 344: Operating Systems I**
 
-This mini shell program for Linux is intended to demonstrate competency in certain operating system concepts including:
+This mini shell program for Linux is intended to demonstrate competency with certain operating system concepts including:
 
 - Signals, signal handling, and interrupts
 - Process creation, management, and control
